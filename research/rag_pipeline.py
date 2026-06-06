@@ -1,6 +1,10 @@
 from pypdf import PdfReader
 from chunker import chunk_text
-import chromadb
+
+from retrieval.base import (
+    get_or_create_collection,
+    embed
+)
 
 # -------------------------------
 # STEP 1: Load PDF
@@ -25,29 +29,41 @@ chunks = chunk_text(text)
 print(f"Total Chunks: {len(chunks)}")
 
 # -------------------------------
-# STEP 3: Create ChromaDB Collection
+# STEP 3: Generate Embeddings
 # -------------------------------
 
-client = chromadb.Client()
+embeddings = embed(chunks)
 
-collection = client.get_or_create_collection(
-    name="gpt2_paper"
+print("Embeddings Generated!")
+
+# -------------------------------
+# STEP 4: Create Collection
+# -------------------------------
+
+collection = get_or_create_collection(
+    "gpt2_paper"
 )
 
 # -------------------------------
-# STEP 4: Store Chunks
+# STEP 5: Store Chunks
 # -------------------------------
 
-for i, chunk in enumerate(chunks):
+ids = [f"chunk_{i}" for i in range(len(chunks))]
+
+try:
     collection.add(
-        documents=[chunk],
-        ids=[f"chunk_{i}"]
+        documents=chunks,
+        embeddings=embeddings,
+        ids=ids
     )
 
-print("All chunks stored successfully!")
+    print("All chunks stored successfully!")
+
+except Exception:
+    print("Chunks already exist. Skipping insert.")
 
 # -------------------------------
-# STEP 5: User Query
+# STEP 6: Query
 # -------------------------------
 
 query = "What is GPT-2?"
@@ -58,12 +74,15 @@ results = collection.query(
 )
 
 # -------------------------------
-# STEP 6: Display Results
+# STEP 7: Display Results
 # -------------------------------
 
 print("\nTop Retrieved Chunks:\n")
 
-for i, doc in enumerate(results["documents"][0], start=1):
+for i, doc in enumerate(
+    results["documents"][0],
+    start=1
+):
     print(f"\nResult {i}:")
     print(doc[:500])
     print("-" * 50)
