@@ -1,5 +1,15 @@
+#virtual environment
 venv/
+
+#python cache
 __pycache__/
 *.pyc
 
+#vs code settings
+.vscode/
+
+#chromadb generated files
+chroma_store/
+
+#dataset files
 research/datasets/

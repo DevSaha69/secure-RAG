@@ -1,0 +1,15 @@
+[project]
+name = "secure-rag"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[tool.pyrefly]
+python_interpreter = "./venv/Scripts/python.exe"
+search_path = [".", "research"]
+
+[tool.pyright]
+pythonVersion = "3.10"
+venvPath = "."
+venv = "venv"
+include = ["."]
+

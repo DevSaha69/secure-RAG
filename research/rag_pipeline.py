@@ -1,3 +1,16 @@
+import io
+import os
+import sys
+
+# Fix Unicode output on Windows console
+if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+    cast_stdout = sys.stdout
+    if isinstance(cast_stdout, io.TextIOWrapper):
+        cast_stdout.reconfigure(encoding='utf-8', errors='replace')
+
+# Add the directory of this file to sys.path so chunker and retrieval modules can be imported
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from pypdf import PdfReader
 from chunker import chunk_text
 
@@ -10,7 +23,12 @@ from retrieval.base import (
 # STEP 1: Load PDF
 # -------------------------------
 
-reader = PdfReader("research/datasets/gpt2.pdf")
+# Resolve PDF path relative to this file
+base_dir = os.path.dirname(os.path.abspath(__file__))
+pdf_path = os.path.join(base_dir, "datasets", "gpt2.pdf")
+
+reader = PdfReader(pdf_path)
+
 
 text = ""
 
@@ -79,10 +97,15 @@ results = collection.query(
 
 print("\nTop Retrieved Chunks:\n")
 
-for i, doc in enumerate(
-    results["documents"][0],
-    start=1
-):
-    print(f"\nResult {i}:")
-    print(doc[:500])
-    print("-" * 50)
+if not results or not results.get("documents") or not results["documents"][0]:
+    print("No results returned from the collection.")
+else:
+    for i, doc in enumerate(
+        results["documents"][0],
+        start=1
+    ):
+        print(f"\nResult {i}:")
+        # Safely encode to console encoding, replacing unencodable characters
+        safe_doc = doc[:500].encode(sys.stdout.encoding or 'utf-8', errors='replace').decode(sys.stdout.encoding or 'utf-8')
+        print(safe_doc)
+        print("-" * 50)
