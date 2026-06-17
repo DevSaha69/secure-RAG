@@ -1,6 +1,6 @@
 import chromadb
 
-client = chromadb.Client()
+client = chromadb.EphemeralClient()
 
 collection = client.create_collection(
     name="gpt2_paper"
@@ -21,4 +21,4 @@ results = collection.query(
     n_results=1
 )
 
-print(results)
+print(results)

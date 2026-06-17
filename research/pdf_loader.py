@@ -1,7 +1,17 @@
+import os
+import sys
+
+# Add the directory of this file to sys.path so chunker can be imported
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from pypdf import PdfReader
 from chunker import chunk_text
 
-reader = PdfReader("research/datasets/gpt2.pdf")
+# Resolve PDF path relative to this file
+base_dir = os.path.dirname(os.path.abspath(__file__))
+pdf_path = os.path.join(base_dir, "datasets", "gpt2.pdf")
+
+reader = PdfReader(pdf_path)
 
 text = ""
 
@@ -15,5 +25,8 @@ chunks = chunk_text(text)
 
 print("Total Chunks:", len(chunks))
 
-print("\nFirst Chunk:\n")
-print(chunks[0])
+if chunks:
+    print("\nFirst Chunk:\n")
+    print(chunks[0])
+else:
+    print("\nNo chunks generated.")
