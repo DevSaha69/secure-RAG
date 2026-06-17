@@ -45,3 +45,4 @@ class HybridRetriever:
             retrieved.append((doc_map[key], rrf_scores[key]))
 
         return retrieved
+
