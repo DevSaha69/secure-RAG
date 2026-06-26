@@ -13,3 +13,8 @@ chroma_store/
 
 #dataset files
 research/datasets/
+
+# Database & env configs
+secure_rag.db
+*.db
+.env

@@ -1,4 +1,4 @@
-from retrieval.base import embed, get_or_create_collection
+from .base import embed, get_or_create_collection
 
 class TopKRetriever:
     def __init__(self, collection_name="gpt2_paper"):

@@ -1,5 +1,5 @@
 import numpy as np
-from retrieval.base import embed, get_or_create_collection
+from .base import embed, get_or_create_collection
 
 class MMRRetriever:
     def __init__(self, collection_name="gpt2_paper", lambda_param=0.5):
