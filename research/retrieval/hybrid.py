@@ -1,5 +1,5 @@
-from retrieval.bm25 import BM25Retriever
-from retrieval.topk import TopKRetriever
+from .bm25 import BM25Retriever
+from .topk import TopKRetriever
 
 class HybridRetriever:
     def __init__(self, chunks, collection_name="gpt2_paper", rrf_k=60):
