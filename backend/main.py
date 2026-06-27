@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import init_db
-from backend.routes import query, upload
+from backend.routes import query, upload, attack, collections
 
 app = FastAPI(title="Secure RAG API", version="0.1.0")
 
@@ -32,6 +32,8 @@ def startup():
 
 app.include_router(upload.router, prefix="/api")
 app.include_router(query.router, prefix="/api")
+app.include_router(attack.router, prefix="/api")
+app.include_router(collections.router, prefix="/api")
 
 
 @app.get("/")
