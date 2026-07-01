@@ -1,49 +1,55 @@
-import { useState } from 'react'
-import { uploadPDF, queryRAG } from './api/client'
+import { useState, useEffect } from 'react'
+import QueryPanel from './components/QueryPanel'
+import AttackPanel from './components/AttackPanel'
+import { getCollections, deleteCollection } from './api/client'
 import './App.css'
 
 export default function App() {
-  const [strategy, setStrategy] = useState('mmr')
-  const [query, setQuery] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [chunks, setChunks] = useState([])
-  const [scores, setScores] = useState([])
-  const [timeMs, setTimeMs] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [uploadStatus, setUploadStatus] = useState('')
+  const [mode, setMode] = useState('query') // 'query' | 'attack'
+  const [activeCollection, setActiveCollection] = useState('gpt2_paper')
+  const [collections, setCollections] = useState(['gpt2_paper'])
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 
-  const handleUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setUploadStatus('Uploading and indexing...')
+  const loadCollections = async (selectNewest = false) => {
     try {
-      const { data } = await uploadPDF(file)
-      setUploadStatus(`✅ Successfully indexed ${data.chunks_stored} chunks from "${data.filename}"`)
+      const { data } = await getCollections()
+      setCollections(data.collections)
+      
+      if (data.collections.length > 0) {
+        if (selectNewest) {
+          setActiveCollection(data.collections[data.collections.length - 1])
+        } else if (!data.collections.includes(activeCollection)) {
+          setActiveCollection(data.collections[0])
+        }
+      }
     } catch (err) {
-      console.error(err)
-      const errorMsg = err.response?.data?.detail || 'Error uploading document. Please check server logs.';
-      setUploadStatus(`❌ ${errorMsg}`)
+      console.error('Error fetching collections:', err)
     }
   }
 
-  const handleQuery = async () => {
-    if (!query.trim()) return
-    setLoading(true)
-    setAnswer('')
-    setChunks([])
-    setScores([])
+  useEffect(() => {
+    loadCollections()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    setIsConfirmingDelete(false)
+  }, [activeCollection])
+
+  const handleDeleteCollection = async () => {
+    if (activeCollection === 'gpt2_paper') return
+    if (!isConfirmingDelete) {
+      setIsConfirmingDelete(true)
+      return
+    }
     try {
-      const { data } = await queryRAG(query, strategy)
-      setAnswer(data.answer)
-      setChunks(data.chunks || [])
-      setScores(data.scores || [])
-      setTimeMs(data.time_ms || 0)
+      await deleteCollection(activeCollection)
+      await loadCollections()
+      setIsConfirmingDelete(false)
     } catch (err) {
-      console.error(err)
-      const errorMsg = err.response?.data?.detail || 'Error fetching answer. Make sure backend is running and GEMINI_API_KEY is configured in backend/.env.';
-      setAnswer(`❌ ${errorMsg}`)
-    } finally {
-      setLoading(false)
+      console.error('Error deleting collection:', err)
+      alert(err.response?.data?.detail || 'Failed to delete collection')
+      setIsConfirmingDelete(false)
     }
   }
 
@@ -52,110 +58,62 @@ export default function App() {
       <h1 className="app-title">⚔ SECURE RAG</h1>
       <p className="app-subtitle">A Security-Focused Retrieval-Augmented Generation Platform</p>
 
-      {/* Upload Zone */}
-      <div className="section-card">
-        <h2 className="section-title">Knowledge Base Ingestion</h2>
-        <label className="upload-zone">
-          <div className="upload-icon">📂</div>
-          <div className="upload-label">
-            Click to upload a PDF document and index it in ChromaDB
-          </div>
-          <input 
-            type="file" 
-            accept=".pdf" 
-            className="upload-input" 
-            onChange={handleUpload} 
-          />
-        </label>
-        {uploadStatus && <div className="upload-status">{uploadStatus}</div>}
-      </div>
-
-      {/* Retrieval Configuration */}
-      <div className="section-card">
-        <h2 className="section-title">Retrieval Strategy</h2>
-        <div className="strategy-container">
-          {[
-            { id: 'topk', name: 'Top-K Vector' },
-            { id: 'bm25', name: 'BM25 Keyword' },
-            { id: 'hybrid', name: 'Hybrid (RRF)' },
-            { id: 'mmr', name: 'MMR Diverse' },
-          ].map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setStrategy(s.id)}
-              className={`strategy-pill ${strategy === s.id ? 'active' : ''}`}
-            >
-              {s.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Chat Query Interface */}
-      <div className="section-card">
-        <h2 className="section-title">Ask the Knowledge Base</h2>
-        <div className="chat-input-wrapper">
-          <input
-            className="chat-input"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !loading && handleQuery()}
-            placeholder="Search documents or ask a question..."
-            disabled={loading}
-          />
-          <button 
-            className="chat-button" 
-            onClick={handleQuery} 
-            disabled={loading || !query.trim()}
+      {/* Global Collection Selector Banner */}
+      <div className="collection-selector-banner">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <label htmlFor="collection-select" className="collection-label">
+            Target Collection:
+          </label>
+          <select
+            id="collection-select"
+            value={activeCollection}
+            onChange={(e) => setActiveCollection(e.target.value)}
+            className="collection-dropdown"
           >
-            {loading ? 'Thinking...' : 'Ask'}
-          </button>
+            {collections.map((col) => (
+              <option key={col} value={col}>
+                {col === 'gpt2_paper' ? 'gpt2_paper (Default)' : col}
+              </option>
+            ))}
+          </select>
+          {activeCollection !== 'gpt2_paper' && (
+            <button
+              onClick={handleDeleteCollection}
+              className={`delete-collection-btn ${isConfirmingDelete ? 'confirming' : ''}`}
+              title="Delete this collection permanently"
+            >
+              {isConfirmingDelete ? '⚠️ Confirm Delete?' : '🗑️ Delete Collection'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Generated Response */}
-      {answer && (
-        <div className="result-card">
-          <div className="result-title">Response</div>
-          <div className="result-text">{answer}</div>
-          
-          <div className="meta-info">
-            <div className="meta-item">
-              <span>Strategy:</span> 
-              <strong style={{ color: '#c084fc', textTransform: 'uppercase' }}>{strategy}</strong>
-            </div>
-            <div className="meta-item">
-              <span>Latency:</span> 
-              <strong style={{ color: '#38bdf8' }}>{timeMs.toFixed(1)} ms</strong>
-            </div>
-            <div className="meta-item">
-              <span>Sources:</span> 
-              <strong style={{ color: '#10b981' }}>{chunks.length} chunks</strong>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tab Switcher */}
+      <div className="dashboard-tabs">
+        <button 
+          className={`tab-btn ${mode === 'query' ? 'active' : ''}`}
+          onClick={() => setMode('query')}
+        >
+          🔍 Query Mode
+        </button>
+        <button 
+          className={`tab-btn ${mode === 'attack' ? 'active' : ''}`}
+          onClick={() => setMode('attack')}
+        >
+          ⚔ Attack Simulation
+        </button>
+      </div>
 
-      {/* Retrieved Chunks Drawer */}
-      {chunks.length > 0 && (
-        <details className="chunks-details">
-          <summary className="chunks-summary">
-            <span>Show retrieved context sources ({chunks.length})</span>
-            <span style={{ fontSize: '12px' }}>▼</span>
-          </summary>
-          <div style={{ background: 'rgba(0,0,0,0.2)' }}>
-            {chunks.map((chunk, idx) => (
-              <div key={idx} className="chunk-item">
-                <div className="chunk-header">
-                  Source Chunk #{idx + 1} {scores[idx] !== undefined && `(Score: ${scores[idx].toFixed(4)})`}
-                </div>
-                <div style={{ fontStyle: 'italic', color: '#9ca3af' }}>
-                  "{chunk.length > 400 ? `${chunk.slice(0, 400)}...` : chunk}"
-                </div>
-              </div>
-            ))}
-          </div>
-        </details>
+      {mode === 'query' && (
+        <QueryPanel 
+          activeCollection={activeCollection} 
+          onCollectionsChange={loadCollections} 
+        />
+      )}
+      {mode === 'attack' && (
+        <AttackPanel 
+          activeCollection={activeCollection} 
+        />
       )}
     </div>
   )

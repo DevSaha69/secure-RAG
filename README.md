@@ -26,37 +26,26 @@ The project focuses on both retrieval quality and security robustness.
 ## Current Progress
 
 ### Phase 1: Foundation & Retrieval Layer ✅
+* **Document Processing**: PDF loading, text extraction (PyPDF), word-based overlapping chunks.
+* **Embedding Layer**: Sentence Transformers (`all-MiniLM-L6-v2`) embed generation.
+* **Vector Database**: Persistent ChromaDB store & collection management.
+* **Retrieval**: Semantic vector search, BM25 keyword search, Hybrid search (RRF), Top-K results.
 
-#### Document Processing
+### Phase 2: Advanced Retrieval ✅
+* **Maximal Marginal Relevance (MMR)**: Diverse retrieval strategy to avoid redundancy.
+* **Algorithm Comparison**: Baseline measurements across different indexing methods.
 
-* PDF Loading
-* Text Extraction using PyPDF
-* Word-Based Chunking
-* Overlapping Chunk Strategy
+### Phase 3: LLM Integration ✅
+* **Gemini LLM**: Integrated `gemini-2.5-flash` model for generating response answers.
+* **Pipeline API**: Created FastAPI backend `/upload` and `/query` endpoints.
+* **Web UI Dashboard**: Built React interface displaying document upload status, retrieval strategies, latency, and source chunks.
 
-#### Embedding Layer
-
-* Sentence Transformers (all-MiniLM-L6-v2)
-* Explicit Embedding Generation
-
-#### Vector Database
-
-* ChromaDB Integration
-* Persistent ChromaDB Storage
-* Collection Management
-
-#### Retrieval Systems
-
-* Semantic Retrieval (Vector Search)
-* BM25 Keyword Retrieval
-* Hybrid Retrieval (BM25 + Vector Search)
-* Top-K Retrieval
-
-#### Software Engineering
-
-* Modular Retrieval Architecture
-* Reusable Retrieval Components
-* GitHub Collaboration Workflow
+### Phase 4: Security Attacks (Attack Layer) ✅
+* **Prompt Injection**: Automated injection payloads (`IGNORE ALL PREVIOUS INSTRUCTIONS...`) to override LLM behavior.
+* **Knowledge Base Poisoning**: Injected false facts into ChromaDB and tracked retrieval poisoning ranks in Top-K.
+* **API Simulation Endpoints**: Added `/api/attack` and `/api/cleanup` endpoints to execute attacks and clean databases synchronously.
+* **Attack Simulation UI**: Integrated comparison dashboard with side-by-side Before/After cards, success/resisted status badges, and top-K poison gauges.
+* **Dynamic Named Collections**: Added support for creating custom collection targets on PDF ingestion, switching collections dynamically from a global selector banner, viewing collection-specific chunk statistics, and deleting collections permanently.
 
 ---
 
@@ -92,16 +81,17 @@ docs/
 
 research/
 ├── retrieval/
-│ ├── base.py
-│ ├── bm25.py
-│ ├── hybrid.py
-│ ├── mmr.py
-│ └── topk.py
-│
+│   ├── base.py
+│   ├── bm25.py
+│   ├── hybrid.py
+│   ├── mmr.py
+│   └── topk.py
 ├── attacks/
+│   ├── __init__.py
+│   ├── attack1_prompt_injection.py
+│   └── attack2_kb_poisoning.py
 ├── defenses/
 ├── evaluation/
-│
 ├── pdf_loader.py
 ├── chunker.py
 ├── embedder.py
@@ -154,6 +144,8 @@ research/
 
 ## Current Status
 
-Retrieval Foundation Completed ✅
+## Current Status
 
-Security Research Phase Starting 🚀
+Security Attacks Phase (Phase 4) Completed ✅
+
+Next Phase: Defense Mechanisms (Phase 5) Starting 🚀
