@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
 from backend.routes import query, upload, attack, collections
 
-app = FastAPI(title="Secure RAG API", version="0.1.0")
+app = FastAPI(title="Secure RAG API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,

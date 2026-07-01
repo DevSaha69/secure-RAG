@@ -17,29 +17,32 @@ def query(req: QueryRequest, db: Session = Depends(get_db)):
     start = time.perf_counter()
 
     chunks, scores = retrieve(req.query, req.strategy, req.top_k, req.collection)
-    
-    from google.api_core.exceptions import ResourceExhausted, GoogleAPICallError
-    from fastapi import HTTPException
 
-    try:
-        answer = generate_answer(req.query, chunks)
-    except ResourceExhausted:
-        raise HTTPException(
-            status_code=429,
-            detail="Gemini API rate limit or quota exceeded. You have exceeded your free tier limits (20 requests per day per project). Please wait a while before trying again, or configure a different API key."
-        )
-    except GoogleAPICallError as e:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Gemini API error: {str(e)}"
-        )
+    # Only call Gemini if include_llm is True
+    answer = None
+    if req.include_llm:
+        from google.api_core.exceptions import ResourceExhausted, GoogleAPICallError
+        from fastapi import HTTPException
+
+        try:
+            answer = generate_answer(req.query, chunks)
+        except ResourceExhausted:
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini API rate limit or quota exceeded. You have exceeded your free tier limits (20 requests per day per project). Please wait a while before trying again, or configure a different API key."
+            )
+        except GoogleAPICallError as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gemini API error: {str(e)}"
+            )
 
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     db.add(QueryLog(
         query=req.query,
         strategy=req.strategy,
-        answer=answer,
+        answer=answer or "(retrieval only)",
         time_ms=elapsed_ms,
         chunks_used=len(chunks)
     ))
@@ -50,5 +53,7 @@ def query(req: QueryRequest, db: Session = Depends(get_db)):
         chunks=chunks,
         scores=scores,
         strategy=req.strategy,
-        time_ms=round(elapsed_ms, 2)
+        time_ms=round(elapsed_ms, 2),
+        include_llm=req.include_llm,
     )
+

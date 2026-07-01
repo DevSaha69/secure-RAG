@@ -10,8 +10,8 @@ export const uploadPDF = (file, collection = 'gpt2_paper') => {
   })
 }
 
-export const queryRAG = (query, strategy = 'mmr', top_k = 3, collection = 'gpt2_paper') =>
-  api.post('/query', { query, strategy, top_k, collection })
+export const queryRAG = (query, strategy = 'mmr', top_k = 3, collection = 'gpt2_paper', include_llm = true) =>
+  api.post('/query', { query, strategy, top_k, collection, include_llm })
 
 export const runAttack = (payload) =>
   api.post('/attack', payload)
