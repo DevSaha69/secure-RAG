@@ -74,6 +74,11 @@ def run_attack(req: AttackRequest):
     injected_text = ""
     poisoned_in_top_k = 0
     poison_ratio = 0.0
+    noise_in_top_k = None
+    resource_normal = None
+    resource_adversarial = None
+    time_amplification_factor = None
+    adversarial_query = None
 
     if req.attack_type == "prompt_injection":
         from research.attacks.attack1_prompt_injection import (
@@ -111,19 +116,53 @@ def run_attack(req: AttackRequest):
         poisoned_in_top_k = metrics["poisoned_count"]
         poison_ratio = metrics["poison_ratio"]
 
+    elif req.attack_type == "context_stuffing":
+        from research.attacks.attack3_context_stuffing import (
+            inject_stuffing,
+            measure_stuffing_impact,
+        )
+        result = inject_stuffing(
+            req.collection,
+            n_chunks=req.n_chunks,
+        )
+        injected_text = result["sample_chunk"]
+
+        # Measure stuffing chunks in top-k
+        impact = measure_stuffing_impact(req.collection, req.query, req.top_k)
+        noise_in_top_k = impact["noise_in_top_k"]
+
+    elif req.attack_type == "resource_exhaustion":
+        from research.attacks.attack4_resource_exhaustion import (
+            run_exhaustion_comparison,
+        )
+        comparison = run_exhaustion_comparison(
+            req.collection,
+            req.query,
+            adversarial_type=req.adversarial_type,
+            strategy=req.strategy,
+            top_k=req.top_k,
+        )
+        injected_text = comparison["adversarial_query"]
+        adversarial_query = comparison["adversarial_query"]
+        resource_normal = comparison["normal"]
+        resource_adversarial = comparison["adversarial"]
+        time_amplification_factor = comparison["time_amplification_factor"]
+
     else:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown attack_type '{req.attack_type}'. "
-                   f"Valid options: 'prompt_injection', 'kb_poisoning'",
+                   f"Valid options: 'prompt_injection', 'kb_poisoning', 'context_stuffing', 'resource_exhaustion'",
         )
 
     # Invalidate BM25/Hybrid caches so they see the new poisoned chunk
     invalidate_cache(req.collection)
 
     # ── Step 3: Retrieve from the POISONED system ──────────────────
+    # For resource exhaustion, retrieve with the adversarial query to test impact
+    after_query = adversarial_query if (req.attack_type == "resource_exhaustion" and adversarial_query) else req.query
     after_chunks, _ = retrieve(
-        req.query, req.strategy, req.top_k, req.collection
+        after_query, req.strategy, req.top_k, req.collection
     )
 
     # ── Step 3b: Optional LLM generation on poisoned chunks ────────
@@ -132,7 +171,9 @@ def run_attack(req: AttackRequest):
     if req.include_llm:
         from google.api_core.exceptions import ResourceExhausted, GoogleAPICallError
         try:
-            after_answer = generate_answer(req.query, after_chunks)
+            # Query LLM with the actual tested query
+            llm_query = adversarial_query if (req.attack_type == "resource_exhaustion" and adversarial_query) else req.query
+            after_answer = generate_answer(llm_query, after_chunks)
         except ResourceExhausted:
             raise HTTPException(
                 status_code=429,
@@ -159,6 +200,10 @@ def run_attack(req: AttackRequest):
         attack_succeeded=succeeded,
         include_llm=req.include_llm,
         collection=req.collection,
+        noise_in_top_k=noise_in_top_k,
+        resource_normal=resource_normal,
+        resource_adversarial=resource_adversarial,
+        time_amplification_factor=time_amplification_factor,
     )
 
 
@@ -178,11 +223,15 @@ def cleanup(req: CleanupRequest):
         from research.attacks.attack2_kb_poisoning import cleanup_attack2
         total_removed += cleanup_attack2(req.collection)
 
-    if req.attack_type not in ("prompt_injection", "kb_poisoning", "all"):
+    if req.attack_type in ("context_stuffing", "all"):
+        from research.attacks.attack3_context_stuffing import cleanup_attack3
+        total_removed += cleanup_attack3(req.collection)
+
+    if req.attack_type not in ("prompt_injection", "kb_poisoning", "context_stuffing", "all"):
         raise HTTPException(
             status_code=400,
             detail=f"Unknown attack_type '{req.attack_type}'. "
-                   f"Valid: 'prompt_injection', 'kb_poisoning', 'all'",
+                   f"Valid: 'prompt_injection', 'kb_poisoning', 'context_stuffing', 'all'",
         )
 
     invalidate_cache(req.collection)

@@ -17,4 +17,6 @@ research/datasets/
 # Database & env configs
 secure_rag.db
 *.db
-.env
+.env
+
+scratch/

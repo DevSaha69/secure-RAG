@@ -10,6 +10,7 @@ class QueryRequest(BaseModel):
     top_k: int = 3
     collection: str = "gpt2_paper"
     include_llm: bool = True     # False = retrieval only (no Gemini calls)
+    defense_enabled: bool = False  # Enable prompt sanitization, rate limits, anomaly filters
 
 
 class QueryResponse(BaseModel):
@@ -28,28 +29,43 @@ class UploadResponse(BaseModel):
 
 
 class AttackRequest(BaseModel):
-    attack_type: str          # "prompt_injection" | "kb_poisoning"
+    attack_type: str          # "prompt_injection" | "kb_poisoning" | "context_stuffing" | "resource_exhaustion"
     collection: str = "gpt2_paper"
-    payload: str              # The injected text / false fact
+    payload: str              # The injected text / false fact / informational
     query: str                # The query to test attack success with
     strategy: str = "topk"   # Which retrieval strategy to test
     top_k: int = 3
     template_index: int = 0   # For prompt injection: which template (0–4)
     include_llm: bool = True   # False = retrieval metrics only (no Gemini calls)
+    n_chunks: int = 100          # For context stuffing: number of noise chunks
+    adversarial_type: str = "repetition"  # For resource exhaustion: query type
+
+
+class ResourceMetrics(BaseModel):
+    query_length_chars: int
+    time_ms: float
+    cpu_percent: float
+    memory_mb: float
+    energy_joules_estimate: float
 
 
 class AttackResponse(BaseModel):
     attack_type: str
-    injected_text: str              # The exact text injected into the KB
+    injected_text: str              # The exact text injected into the KB / adversarial query
     before_answer: Optional[str]     # LLM answer on the CLEAN system (null if include_llm=False)
     after_answer: Optional[str]      # LLM answer on the POISONED system (null if include_llm=False)
     before_chunks: list[str]         # Chunks retrieved before attack
     after_chunks: list[str]          # Chunks retrieved after attack
-    poisoned_in_top_k: int           # How many of top_k chunks are poisoned
+    poisoned_in_top_k: int           # How many of top_k chunks are poisoned (Attack 2)
     poison_ratio: float              # poisoned_in_top_k / top_k
     attack_succeeded: Optional[bool] # True if after_answer differs significantly (null if include_llm=False)
     include_llm: bool                # Whether LLM generation was included
     collection: str
+    noise_in_top_k: Optional[int] = None                  # Attack 3
+    resource_normal: Optional[ResourceMetrics] = None      # Attack 4
+    resource_adversarial: Optional[ResourceMetrics] = None  # Attack 4
+    time_amplification_factor: Optional[float] = None     # Attack 4
+
 
 
 class CleanupRequest(BaseModel):
@@ -61,3 +77,14 @@ class CleanupResponse(BaseModel):
     removed: int
     attack_type: str
     collection: str
+
+
+class CollectionHealthResponse(BaseModel):
+    total_chunks: int
+    poison_chunks: int
+    legitimate_chunks: int
+    noise_ratio: float
+    health_score: float
+    alert: bool
+    alert_threshold: float
+
