@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from research.retrieval.base import client
 from backend.services.rag_service import invalidate_cache
+from backend.schemas import CollectionHealthResponse
 
 router = APIRouter()
 
@@ -33,3 +34,23 @@ def delete_collection(name: str):
         raise HTTPException(status_code=404, detail=f"Collection '{name}' not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/health", response_model=CollectionHealthResponse)
+def collection_health(collection: str = "gpt2_paper"):
+    from research.defenses.defense3_collection_health import get_collection_health
+    try:
+        return get_collection_health(collection)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/anomaly-scan")
+def anomaly_scan(collection: str = "gpt2_paper"):
+    from research.defenses.defense2_anomaly_detection import scan_collection_for_anomalies
+    try:
+        flagged = scan_collection_for_anomalies(collection)
+        return {"collection": collection, "flagged_count": len(flagged), "flagged": flagged}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
