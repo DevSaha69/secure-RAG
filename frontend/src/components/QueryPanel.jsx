@@ -1,38 +1,20 @@
-import { useState, useEffect } from 'react'
-import { uploadPDF, queryRAG, getCollectionHealth } from '../api/client'
+import { useState } from 'react'
+import { uploadPDF, queryRAG } from '../api/client'
 
-export default function QueryPanel({ activeCollection, onCollectionsChange }) {
+export default function QueryPanel({ 
+  activeCollection, 
+  onCollectionsChange, 
+  includeLlm, 
+  defenseEnabled, 
+  fetchHealth 
+}) {
   const [strategy, setStrategy] = useState('mmr')
   const [query, setQuery] = useState('')
-  const [answer, setAnswer] = useState(null)
-  const [chunks, setChunks] = useState([])
-  const [scores, setScores] = useState([])
-  const [timeMs, setTimeMs] = useState(0)
-  const [includeLlm, setIncludeLlm] = useState(true)
-  const [llmWasIncluded, setLlmWasIncluded] = useState(true)
-  const [defenseEnabled, setDefenseEnabled] = useState(false)
-  const [health, setHealth] = useState(null)
+  const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
   const [uploadMode, setUploadMode] = useState('current') // 'current' | 'new'
   const [newCollectionName, setNewCollectionName] = useState('')
-  const [hasResult, setHasResult] = useState(false)
-
-  const fetchHealth = async () => {
-    if (!activeCollection) return
-    try {
-      const { data } = await getCollectionHealth(activeCollection)
-      setHealth(data)
-    } catch (err) {
-      console.error('Error fetching collection health:', err)
-    }
-  }
-
-  // Fetch health stats when activeCollection changes
-  useEffect(() => {
-    fetchHealth()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCollection])
 
   const handleUpload = async (e) => {
     const file = e.target.files[0]
@@ -64,65 +46,54 @@ export default function QueryPanel({ activeCollection, onCollectionsChange }) {
   const handleQuery = async () => {
     if (!query.trim()) return
     setLoading(true)
-    setAnswer(null)
-    setChunks([])
-    setScores([])
-    setHasResult(false)
+    const currentQuery = query
+    setQuery('') // Clear input box for next query
     try {
-      const { data } = await queryRAG(query, strategy, 3, activeCollection, includeLlm, defenseEnabled)
-      setAnswer(data.answer)
-      setChunks(data.chunks || [])
-      setScores(data.scores || [])
-      setTimeMs(data.time_ms || 0)
-      setLlmWasIncluded(data.include_llm ?? true)
-      setHasResult(true)
+      const { data } = await queryRAG(currentQuery, strategy, 3, activeCollection, includeLlm, defenseEnabled)
+      const newLog = {
+        id: Date.now(),
+        query: currentQuery,
+        answer: data.answer,
+        chunks: data.chunks || [],
+        scores: data.scores || [],
+        timeMs: data.time_ms || 0,
+        strategyUsed: strategy,
+        llmWasIncluded: data.include_llm ?? true,
+        defenseEnabled: defenseEnabled
+      }
+      setHistory(prev => [newLog, ...prev])
     } catch (err) {
       console.error(err)
       const errorMsg = err.response?.data?.detail || 'Error fetching answer. Make sure backend is running.';
-      setAnswer(`❌ ${errorMsg}`)
-      setHasResult(true)
+      const newLog = {
+        id: Date.now(),
+        query: currentQuery,
+        answer: `❌ ${errorMsg}`,
+        chunks: [],
+        scores: [],
+        timeMs: 0,
+        strategyUsed: strategy,
+        llmWasIncluded: includeLlm,
+        defenseEnabled: defenseEnabled
+      }
+      setHistory(prev => [newLog, ...prev])
     } finally {
       setLoading(false)
     }
   }
 
+  const clearHistory = () => {
+    setHistory([])
+  }
+
   return (
     <>
-      {/* Collection Health Indicator */}
-      {health && (
-        <div style={{
-          padding: '12px 16px',
-          borderRadius: '8px',
-          marginBottom: '20px',
-          background: health.alert ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.05)',
-          border: `1px solid ${health.alert ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.15)'}`,
-          fontSize: '13px',
-          color: health.alert ? '#f87171' : '#10b981',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>{health.alert ? '⚠️' : '🛡️'}</span>
-            <span>
-              {health.alert ? (
-                <strong>Poison Alert: {health.poison_chunks} poisoned / {health.total_chunks} total chunks indexed.</strong>
-              ) : (
-                <span>Knowledge base healthy: <strong>{health.legitimate_chunks}</strong> legitimate chunks indexed.</span>
-              )}
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '11px', textTransform: 'uppercase', opacity: 0.8 }}>Health:</span>
-            <strong style={{ fontSize: '14px', color: health.alert ? '#ef4444' : '#10b981' }}>{health.health_score}%</strong>
-          </div>
-        </div>
-      )}
-
       {/* Upload Zone */}
       <div className="section-card">
-        <h2 className="section-title">Knowledge Base Ingestion</h2>
+        <h2 className="section-title">
+          <span className="material-symbols-outlined">library_add</span>
+          Document Ingestion
+        </h2>
         
         {/* Upload Mode Selector */}
         <div className="upload-options-container">
@@ -134,7 +105,7 @@ export default function QueryPanel({ activeCollection, onCollectionsChange }) {
               checked={uploadMode === 'current'}
               onChange={() => setUploadMode('current')}
             />
-            <span>Upload to active collection (<strong>{activeCollection}</strong>)</span>
+            <span>Ingest into active collection (<strong>{activeCollection}</strong>)</span>
           </label>
           <label className="upload-option-label">
             <input 
@@ -153,7 +124,7 @@ export default function QueryPanel({ activeCollection, onCollectionsChange }) {
             <input 
               type="text" 
               className="chat-input"
-              style={{ padding: '10px 14px', fontSize: '13px', marginBlock: '10px 15px', width: '100%' }}
+              style={{ marginBottom: '13.2px' }}
               placeholder="Enter new collection name (lowercase, numbers, _ or - only)..."
               value={newCollectionName}
               onChange={(e) => setNewCollectionName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
@@ -162,12 +133,12 @@ export default function QueryPanel({ activeCollection, onCollectionsChange }) {
         )}
 
         <label className={`upload-zone ${uploadMode === 'new' && !newCollectionName.trim() ? 'disabled' : ''}`}>
-          <div className="upload-icon">📂</div>
+          <span className="material-symbols-outlined upload-icon">cloud_upload</span>
           <div className="upload-label">
             {uploadMode === 'new' && !newCollectionName.trim() ? (
-              <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>Please enter a collection name above first</span>
+              <span style={{ color: 'var(--warning)', fontWeight: 'bold' }}>Please enter a collection name above first</span>
             ) : (
-              <span>Click to upload a PDF and index it in <strong>{uploadMode === 'current' ? activeCollection : newCollectionName}</strong></span>
+              <span>Click to select a PDF and parse it into <strong>{uploadMode === 'current' ? activeCollection : newCollectionName}</strong></span>
             )}
           </div>
           <input 
@@ -178,12 +149,19 @@ export default function QueryPanel({ activeCollection, onCollectionsChange }) {
             disabled={uploadMode === 'new' && !newCollectionName.trim()}
           />
         </label>
-        {uploadStatus && <div className="upload-status">{uploadStatus}</div>}
+        {uploadStatus && (
+          <div className="upload-status" style={{ color: uploadStatus.includes('Successfully') ? 'var(--success)' : uploadStatus.includes('Uploading') ? 'var(--accent)' : 'var(--danger)' }}>
+            {uploadStatus}
+          </div>
+        )}
       </div>
 
-      {/* Retrieval Configuration */}
+      {/* Retrieval Strategy Selector */}
       <div className="section-card">
-        <h2 className="section-title">Retrieval Strategy</h2>
+        <h2 className="section-title">
+          <span className="material-symbols-outlined">filter_alt</span>
+          Retrieval Algorithm
+        </h2>
         <div className="strategy-container">
           {[
             { id: 'topk', name: 'Top-K Vector' },
@@ -202,121 +180,19 @@ export default function QueryPanel({ activeCollection, onCollectionsChange }) {
         </div>
       </div>
 
-      {/* LLM & Defense Configuration Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBlock: '16px' }}>
-        {/* LLM Toggle */}
-        <div className="section-card" style={{ padding: '14px', margin: 0 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-            onClick={() => setIncludeLlm(!includeLlm)}
-          >
-            <div
-              style={{
-                width: '40px',
-                height: '22px',
-                borderRadius: '11px',
-                background: includeLlm
-                  ? 'linear-gradient(135deg, #c084fc, #6366f1)'
-                  : 'rgba(255, 255, 255, 0.1)',
-                position: 'relative',
-                transition: 'all 0.3s ease',
-                flexShrink: 0,
-                boxShadow: includeLlm ? '0 0 10px rgba(192, 132, 252, 0.3)' : 'none',
-              }}
-            >
-              <div
-                style={{
-                  width: '16px',
-                  height: '16px',
-                  borderRadius: '50%',
-                  background: '#fff',
-                  position: 'absolute',
-                  top: '3px',
-                  left: includeLlm ? '21px' : '3px',
-                  transition: 'left 0.3s ease',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                }}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: '600', color: includeLlm ? '#e5e7eb' : '#6b7280' }}>
-                Gemini LLM
-              </div>
-              <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                {includeLlm ? 'LLM Generation active' : 'Retrieval only'}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Defense Toggle */}
-        <div className="section-card" style={{ padding: '14px', margin: 0 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-            onClick={() => setDefenseEnabled(!defenseEnabled)}
-          >
-            <div
-              style={{
-                width: '40px',
-                height: '22px',
-                borderRadius: '11px',
-                background: defenseEnabled
-                  ? 'linear-gradient(135deg, #10b981, #047857)'
-                  : 'rgba(255, 255, 255, 0.1)',
-                position: 'relative',
-                transition: 'all 0.3s ease',
-                flexShrink: 0,
-                boxShadow: defenseEnabled ? '0 0 10px rgba(16, 185, 129, 0.3)' : 'none',
-              }}
-            >
-              <div
-                style={{
-                  width: '16px',
-                  height: '16px',
-                  borderRadius: '50%',
-                  background: '#fff',
-                  position: 'absolute',
-                  top: '3px',
-                  left: defenseEnabled ? '21px' : '3px',
-                  transition: 'left 0.3s ease',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                }}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: '13px', fontWeight: '600', color: defenseEnabled ? '#e5e7eb' : '#6b7280' }}>
-                RAG Shield
-              </div>
-              <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                {defenseEnabled ? '🛡️ Shield Active' : '⚠️ Shield Off'}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Chat Query Interface */}
+      {/* Query Search Bar */}
       <div className="section-card">
-        <h2 className="section-title">Ask the Knowledge Base</h2>
+        <h2 className="section-title">
+          <span className="material-symbols-outlined">question_answer</span>
+          Ask the Database
+        </h2>
         <div className="chat-input-wrapper">
           <input
             className="chat-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !loading && handleQuery()}
-            placeholder="Search documents or ask a question..."
+            placeholder="Search documents or query the LLM..."
             disabled={loading}
           />
           <button 
@@ -324,83 +200,118 @@ export default function QueryPanel({ activeCollection, onCollectionsChange }) {
             onClick={handleQuery} 
             disabled={loading || !query.trim()}
           >
-            {loading ? 'Thinking...' : includeLlm ? 'Ask' : 'Retrieve'}
+            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+              {loading ? 'sync' : 'search'}
+            </span>
+            {loading ? 'Querying...' : includeLlm ? 'Ask' : 'Retrieve'}
           </button>
         </div>
       </div>
 
-      {/* Generated Response or Retrieval-Only Notice */}
-      {hasResult && (
-        <div className="result-card">
-          {llmWasIncluded && answer ? (
-            <>
-              <div className="result-title">Response</div>
-              <div className="result-text">{answer}</div>
-            </>
-          ) : answer && answer.startsWith('❌') ? (
-            <>
-              <div className="result-title">Error</div>
-              <div className="result-text">{answer}</div>
-            </>
-          ) : (
-            <>
-              <div className="result-title" style={{ color: '#c084fc' }}>⚡ Retrieval Only</div>
-              <div style={{ padding: '12px', background: 'rgba(192, 132, 252, 0.06)', border: '1px dashed rgba(192, 132, 252, 0.2)', borderRadius: '6px' }}>
-                <span style={{ color: '#9ca3af', fontSize: '14px' }}>
-                  LLM generation was skipped. Showing retrieved chunks and relevance scores below.
+      {/* Question History Stream */}
+      <div className="query-history-container">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 className="section-title" style={{ margin: 0 }}>
+            <span className="material-symbols-outlined">history</span>
+            Query Execution Logs
+          </h3>
+          {history.length > 0 && (
+            <button 
+              onClick={clearHistory}
+              className="delete-collection-btn" 
+              style={{ padding: '4px 10px', fontSize: '11px' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>clear_all</span>
+              Clear Logs
+            </button>
+          )}
+        </div>
+
+        {history.length === 0 ? (
+          <div className="section-card" style={{ textAlign: 'center', padding: '33px', borderStyle: 'dashed' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: '36px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+              explore
+            </span>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+              No query logs registered yet. Type a query above and hit Search to analyze retrieval results.
+            </p>
+          </div>
+        ) : (
+          history.map((log) => (
+            <div key={log.id} className="query-log-item">
+              {/* Log Item Header */}
+              <div className="query-log-header">
+                <span className="query-log-question" title={log.query}>
+                  Query: "{log.query}"
+                </span>
+                <span className="query-meta-badge" style={{ color: 'var(--text-secondary)' }}>
+                  {new Date(log.id).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                 </span>
               </div>
-            </>
-          )}
-          
-          <div className="meta-info">
-            <div className="meta-item">
-              <span>Strategy:</span> 
-              <strong style={{ color: '#c084fc', textTransform: 'uppercase' }}>{strategy}</strong>
-            </div>
-            <div className="meta-item">
-              <span>Latency:</span> 
-              <strong style={{ color: '#38bdf8' }}>{timeMs.toFixed(1)} ms</strong>
-            </div>
-            <div className="meta-item">
-              <span>Sources:</span> 
-              <strong style={{ color: '#10b981' }}>{chunks.length} chunks</strong>
-            </div>
-            {!llmWasIncluded && (
-              <div className="meta-item">
-                <span style={{ color: '#c084fc', fontWeight: '600' }}>⚡ No Gemini calls</span>
-              </div>
-            )}
-            {defenseEnabled && (
-              <div className="meta-item">
-                <span style={{ color: '#10b981', fontWeight: '600' }}>🛡️ Shielded</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Retrieved Chunks Drawer */}
-      {chunks.length > 0 && (
-        <details className="chunks-details" open={!llmWasIncluded}>
-          <summary className="chunks-summary">
-            <span>Show retrieved context sources ({chunks.length})</span>
-            <span style={{ fontSize: '12px' }}>▼</span>
-          </summary>
-          <div style={{ background: 'rgba(0,0,0,0.2)' }}>
-            {chunks.map((chunk, idx) => (
-              <div key={idx} className="chunk-item">
-                <div className="chunk-header">
-                  Source Chunk #{idx + 1} {scores[idx] !== undefined && `(Score: ${scores[idx].toFixed(4)})`}
-                </div>
-                <div style={{ fontStyle: 'italic', color: '#9ca3af' }}>
-                  "{chunk.length > 400 ? `${chunk.slice(0, 400)}...` : chunk}"
-                </div>
+              {/* Log Item Body */}
+              <div className="query-log-body">
+                {log.llmWasIncluded ? (
+                  <p style={{ color: 'var(--text-main)', margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {log.answer}
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}>
+                    <span className="material-symbols-outlined" style={{ color: 'var(--accent)' }}>info</span>
+                    <span>
+                      LLM generation bypassed. Displaying raw semantic retrieval results.
+                    </span>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-        </details>
-      )}
+
+              {/* Metadata Badges */}
+              <div className="query-log-meta">
+                <span className="query-meta-badge">
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>analytics</span>
+                  Algorithm: <strong style={{ textTransform: 'uppercase' }}>{log.strategyUsed}</strong>
+                </span>
+                <span className="query-meta-badge">
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>schedule</span>
+                  Latency: <strong>{log.timeMs.toFixed(1)} ms</strong>
+                </span>
+                <span className="query-meta-badge">
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>layers</span>
+                  Sources: <strong>{log.chunks.length} chunks</strong>
+                </span>
+                {log.defenseEnabled && (
+                  <span className="query-meta-badge" style={{ color: 'var(--success)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--success)' }}>shield</span>
+                    Shield Active
+                  </span>
+                )}
+              </div>
+
+              {/* Context Drawer */}
+              {log.chunks.length > 0 && (
+                <details className="chunks-details">
+                  <summary className="chunks-summary">
+                    <span>Show Retrieved Context Sources ({log.chunks.length})</span>
+                    <span className="material-symbols-outlined">expand_more</span>
+                  </summary>
+                  <div style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}>
+                    {log.chunks.map((chunk, idx) => (
+                      <div key={idx} className="chunk-item">
+                        <div className="chunk-header">
+                          Source Chunk #{idx + 1} {log.scores[idx] !== undefined && `(Distance Score: ${log.scores[idx].toFixed(4)})`}
+                        </div>
+                        <div style={{ color: 'var(--text-main)', fontStyle: 'normal' }}>
+                          "{chunk}"
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </>
   )
 }
